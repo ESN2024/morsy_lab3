@@ -1,4 +1,5 @@
 #include "system.h"
+#include <math.h>
 #include "altera_avalon_timer_regs.h"
 #include "altera_avalon_timer.h"
 #include "altera_avalon_pio_regs.h"
@@ -36,28 +37,23 @@
 #define Threshold_Act 0x24          // Hexadecimal address for the HIGH-G detection register
 #define act_inact_Ctl 0x27          // Hexadecimal address for the choice axes register
 #define INT_SOURCE 0x30             // Hexadecimal address for register who ensure that the function has triggered
+#define SCL_speed 400000
 
-
-void send_data(alt_u32 reg, alt_u32 data);
-alt_u8 read_data(alt_u32 reg);
+void send_data(alt_u16 reg, alt_u16 data);
+alt_8 read_data(alt_u16 reg);
 void recup_data();
 void init();
-int print_val(int8_t val0,int8_t val1);
-void aff(uint16_t nbr);
-static void irqhandler_btn(void *context);
-static void irqhandler_switch(void *context);
-static void interrup(void *Context);
-uint8_t detection(int x,int y,int z);
+alt_16 print_val(alt_8 val0,alt_8 val1);
+alt_u8 detection(alt_u16 x,alt_u16 y,alt_u16 z);
 
-
-volatile int x=0.0,y=0.0,z=0.0;
+volatile alt_16 x=0,y=0,z=0;
+volatile uint16_t sign ;
+volatile alt_u8 xdata0,xdata1,ydata0,ydata1,zdata0,zdata1;
 volatile uint8_t detect=0;
 volatile uint8_t THRESOLD_VAL=14;
 volatile uint32_t time=5000;
 volatile uint8_t cpt=0;
 volatile uint8_t addr=0x00;
-alt_u8 xdata0,xdata1 , ydata0,ydata1, zdata0,zdata1;
-
 
 static void irqhandler_btn(void *context){
     alt_printf("INTERRUPT push_btn\n");
@@ -81,146 +77,142 @@ static void irqhandler_switch(void *context){
 static void interrup(void *Context){
 
     alt_printf("timer \n\r");
+    IOWR_ALTERA_AVALON_TIMER_STATUS(TIMER_0_BASE, 0b00);
+
 
     recup_data();
-    x=print_val(xdata0,xdata1);
-	y=print_val(ydata0,ydata1);
-	z=print_val(zdata0,zdata1);
 
-	alt_printf("X = %x\n",x);
-	alt_printf("y = %x\n",y);
-	alt_printf("z = %x\n",z);
 
-	if((cpt%3)==0){
+    alt_printf("X = %x\n",x);
+    alt_printf("y = %x\n",y);
+    alt_printf("z = %x\n",z);
+
+    if((cpt%3)==0){
+        x=print_val(xdata0,xdata1);
         aff(x);
         alt_printf("x est affichee\n\r");
-	}
-	else if((cpt%3)==1){
+        usleep(100000);
+    }
+    else if((cpt%3)==1){
+        y=print_val(ydata0,ydata1);
         aff(y);
         alt_printf("y est affichee\n\r");
-	}
-	else{
-        aff(z);
-        alt_printf("z est affichee\n\r");
-	}
-
-    detect=detection(x,y,z);
-    if (detect==1){
-        addr=0x01;
-        IOWR_ALTERA_AVALON_PIO_DATA(LED_BASE, addr);
-        usleep(time);
+        usleep(100000);
     }
     else{
-        addr=0x00;
+        z=print_val(zdata0,zdata1);
+        aff(z);
+        alt_printf("z est affichee\n\r");
+        usleep(100000);
     }
+
 }
 
-void send_data(alt_u32 reg, alt_u32 data){
+void send_data(alt_u16 reg, alt_u16 data){
 
     I2C_start(OPENCORES_I2C_0_BASE,adx_address , 0);
 
-	I2C_write(OPENCORES_I2C_0_BASE,reg, 0);
+    I2C_write(OPENCORES_I2C_0_BASE,reg, 0);
 
-	I2C_write(OPENCORES_I2C_0_BASE,data, 1);
+    I2C_write(OPENCORES_I2C_0_BASE,data, 1);
 }
 
-alt_u8 read_data(alt_u32 reg){
+alt_8 read_data(alt_u16 reg){
 
-    int8_t data;
+    alt_8 data;
     //write message
     I2C_start(OPENCORES_I2C_0_BASE,adx_address , 0);
-	I2C_write(OPENCORES_I2C_0_BASE,reg, 0);
+    data=I2C_write(OPENCORES_I2C_0_BASE,reg, 0);
 
-	I2C_start(OPENCORES_I2C_0_BASE,adx_address , 1);
-	data = I2C_read(OPENCORES_I2C_0_BASE,1);
+    I2C_start(OPENCORES_I2C_0_BASE,adx_address , 1);
+    data = I2C_read(OPENCORES_I2C_0_BASE,1);
 
-	return data;
+    return data;
 }
 
 void recup_data(){
 
     xdata0=read_data(X_Axis_Register_DATAX0);
-    alt_printf("X0 = %x\n",X_Axis_Register_DATAX0);
+    alt_printf("X0 = %x\n",(alt_u32)xdata0);
     xdata1=read_data(X_Axis_Register_DATAX1);
-    alt_printf("X1 = %x\n",X_Axis_Register_DATAX1);
+    alt_printf("X1 = %x\n",(alt_u32)xdata1);
     ydata0=read_data(Y_Axis_Register_DATAY0);
+    alt_printf("Y0 = %x\n",(alt_u32)ydata0);
     ydata1=read_data(Y_Axis_Register_DATAY1);
+    alt_printf("Y1 = %x\n",(alt_u32)ydata1);
     zdata0=read_data(Z_Axis_Register_DATAZ0);
+    alt_printf("Z0 = %x\n",(alt_u32)zdata0);
     zdata1=read_data(Z_Axis_Register_DATAZ1);
+    alt_printf("Z1 = %x\n",(alt_u32)zdata1);
 
 
 }
-
 void init(){
+    I2C_init(OPENCORES_I2C_0_BASE,TIMER_0_FREQ,SCL_speed);
     send_data(power_data,0x0F);
-    send_data(data_format,0x0B);
+    send_data(data_format,0x08);
     send_data(Power_Register,0x08);
     send_data(INT_ENABLE,0x10);
     send_data(INT_map,0xEF);
-    send_data(off_x,(int8_t)-1);
-    send_data(off_y,(int8_t)-1);
-    send_data(off_z,(int8_t)-11);
+    ////////////////calibration
+    send_data(off_x,0x00);
+    send_data(off_y,0x00);
+    send_data(off_z,0x00);
+    send_data(off_x,0x02);
+    send_data(off_y,0x04);
+    send_data(off_z,0x06);
     send_data(Threshold_Act,0xA0);
+
+    usleep(100000);
 }
 
-uint8_t detection(int x,int y,int z){
-  uint8_t detect=0;
-  if (x > THRESOLD_VAL || y >THRESOLD_VAL || z >THRESOLD_VAL){
-    detect=1;
-  }
-  else{
-    detect=0;
-  }
-  return detect;
-}
-
-int print_val(int8_t val0,int8_t val1){
-    int16_t res=0;
-    int16_t val2=0;
-    int16_t res_f=0;
-    val2=(val1 & 0x1f)<<8;
+alt_16 print_val(alt_8 val0,alt_8 val1){
+    alt_16 res=0;
+    alt_16  val2=0;
+    alt_16  res_f=0;
+    val2=(val1 )<<8;
 
     res = val2 | val0;
 
-    if(res > 4095)          // to have negative values for 13 bits, 2^13=8096
-    {
-    res = res - 8096;
-    }
 
-    res_f=res*4;       //For a range of +-16g, we need to multiply the raw values by 0.0039, according to the datasheet
+    res_f=round(res*3.9);       //For a range of +-16g, we need to multiply the raw values by 0.0039, according to the datasheet
+
+
+    if(res_f & 0x8000)          // to have negative values for 13 bits, 2^13=8096
+    {
+        sign=1;
+        res_f = (0xffff^res_f)+1;
+    }
+    else{
+        sign=0;
+    }
+    alt_printf("res_f = %x\n",res_f);
     return res_f;
 }
 
-void aff(uint16_t nbr){
-	uint16_t i =0;
-	uint16_t tab[4] = {0,0,0,0};
-    uint16_t sign;
+void aff(alt_u16 nbr){
+    alt_printf("nbr = %x\n",(alt_u16)nbr);
 
-    if (nbr<0){
-       sign=1;
-       nbr=nbr*-1.0000;
+    IOWR_ALTERA_AVALON_PIO_DATA(SEG1_BASE,(nbr%10));
+    IOWR_ALTERA_AVALON_PIO_DATA(SEG2_BASE,(nbr/10)%10);
+    IOWR_ALTERA_AVALON_PIO_DATA(SEG3_BASE,(nbr/100)%10);
+    IOWR_ALTERA_AVALON_PIO_DATA(SEG4_BASE,(nbr/1000)%10);
+    IOWR_ALTERA_AVALON_PIO_DATA(SEG5_BASE,(nbr/10000)%10);
+    IOWR_ALTERA_AVALON_PIO_DATA(SEG6_BASE,sign);
+}
+
+alt_u8 detection(alt_u16 x,alt_u16 y,alt_u16 z){
+    alt_u8 detect=0;
+    if (x > THRESOLD_VAL || y >THRESOLD_VAL || z >THRESOLD_VAL){
+        detect=1;
     }
     else{
-        sign =0;
+        detect=0;
     }
-    IOWR_ALTERA_AVALON_PIO_DATA(SEG5_BASE, (nbr > 9) ? 1 : 0);
-
-
-	while (nbr >= 10) {
-		tab[i] = nbr % 10;
-		nbr = nbr / 10;
-		i = i+1;
-	}
-	tab[i] = nbr;
-
-	IOWR_ALTERA_AVALON_PIO_DATA(SEG1_BASE,tab[0]);
-	IOWR_ALTERA_AVALON_PIO_DATA(SEG2_BASE,tab[1]);
-	IOWR_ALTERA_AVALON_PIO_DATA(SEG3_BASE,tab[2]);
-	IOWR_ALTERA_AVALON_PIO_DATA(SEG4_BASE,tab[3]);
-	IOWR_ALTERA_AVALON_PIO_DATA(SEG6_BASE,sign);
+    return detect;
 }
-int main(){
 
+int main(){
     init();
 
     IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BTN_BASE, 0x01);
@@ -229,25 +221,19 @@ int main(){
     IOWR_ALTERA_AVALON_PIO_IRQ_MASK(SWITCH_BASE, 0b00001111);
     IOWR_ALTERA_AVALON_PIO_EDGE_CAP(SWITCH_BASE, 0b00001111);
 
-/*
-    alt_ic_isr_register(SWITCH_IRQ_INTERRUPT_CONTROLLER_ID, SWITCH_IRQ, irqhandler_switch, NULL, NULL);
-    alt_ic_isr_register(PUSH_BTN_IRQ_INTERRUPT_CONTROLLER_ID, PUSH_BTN_IRQ, irqhandler_btn, NULL, NULL);
-    alt_ic_isr_register(TIMER_0_IRQ_INTERRUPT_CONTROLLER_ID,TIMER_0_IRQ, interrup,NULL, NULL);
-*/
-
     alt_irq_register(PUSH_BTN_IRQ, NULL, irqhandler_btn);
     alt_irq_register(SWITCH_IRQ, NULL, irqhandler_switch);
     alt_irq_register(TIMER_0_IRQ, NULL, interrup);
 
     // CHECK LE STATUS
-	int status = IORD_ALTERA_AVALON_TIMER_STATUS(TIMER_0_BASE);
-	alt_printf("STATUS = %x\n",status);
+    int status = IORD_ALTERA_AVALON_TIMER_STATUS(TIMER_0_BASE);
+    alt_printf("STATUS = %x\n",status);
 
-	// CHECK LE CONTROL
-	int init = IORD_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE);
-	alt_printf("init = %x\n",init);
-	while(1){
+    // CHECK LE CONTROL
+    int init = IORD_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE);
+    alt_printf("init = %x\n",init);
+    while(1){
 
-	}
-	return 0;
+    }
+    return 0;
 }
